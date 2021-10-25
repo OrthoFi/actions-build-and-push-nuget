@@ -1,0 +1,67 @@
+name: Build and Push Nuget Packages
+description: Build and Push Nuget Packages
+inputs:
+  github-token:
+    description: secrets.BUILD_GITHUB_TOKEN
+    required: true
+
+  solution:
+    description: Name of the solution
+    required: false
+
+runs:
+  using: composite
+  steps:
+    - name: Configure GitHub User
+      shell: pwsh
+      run: |
+        git config user.name "github-actions"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+    - name: Generate Version
+      shell: pwsh
+      run: |
+        npm i standard-version
+
+        $branch = "${{ github.ref }}".Replace("refs/heads/", "")
+        if($branch -eq "main") {
+          npx standard-version
+        }
+        else {
+          npx standard-version -p "${branch}+${{ github.run_attempt }}"
+        }
+
+    - name: Build
+      shell: pwsh
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        GITHUB_USERNAME: GitHub
+      run: dotnet build ${{ inputs.solution }} --nologo -c Release
+
+    - name: Test
+      shell: pwsh
+      run: dotnet test --no-build -c Release --nologo -r out_tests --logger "trx" --collect "Code Coverage"
+
+    - name: Upload Test Results
+      uses: actions/upload-artifact@v2
+      with:
+        name: tests
+        path: out_tests
+
+    - name: Package
+      shell: pwsh
+      run: dotnet pack ${{ inputs.solution }} -o out --no-build -c Release
+
+    - name: Upload
+      shell: pwsh
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        GITHUB_USERNAME: GitHub
+      run: dotnet nuget push "out/*.nupkg" -s GitHub -k ${{ inputs.github-token }}
+
+    - name: Push
+      shell: pwsh
+      run: |
+        if("${{ github.ref }}" -eq "refs/heads/main") {
+          git push --follow-tags
+        }
