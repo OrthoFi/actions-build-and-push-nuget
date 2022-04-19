@@ -28,7 +28,7 @@ runs:
           npx standard-version
         }
         else {
-          npx standard-version -p "${branch}+${{ github.run_attempt }}"
+          npx standard-version -p "${branch}.${{ github.run_id }}"
         }
 
     - name: Build
